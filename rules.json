@@ -1,0 +1,11 @@
+{
+  "channel": "TJGOFERTASs",
+  "rules": [
+    { "id": "rtx5070", "name": "RTX 5070", "pattern": "\\brtx[ \\-]*5070\\b", "exclude": "\\b5070\\s*ti\\b", "max": 4500 },
+    { "id": "rx9070", "name": "RX 9070", "pattern": "\\brx[ \\-]*9070\\b", "exclude": "\\b9070\\s*(?:xt|gre)\\b", "max": 4500 },
+    { "id": "ryzen9600x", "name": "Ryzen 5 9600X", "pattern": "\\b(?:ryzen\\s*5\\s*)?9600x\\b", "max": 950 },
+    { "id": "b650m", "name": "Gigabyte B650M D3HP AX", "pattern": "\\bb650m\\s+d3hp\\s+ax\\b", "max": 650 },
+    { "id": "ak400", "name": "DeepCool AK400", "pattern": "\\bak400\\b", "exclude": "\\bak400\\s*(?:digital|zero|plus)\\b", "max": 140 },
+    { "id": "xpg850", "name": "XPG Core Reactor II VE 850 W", "pattern": "\\bcore\\s*reactor\\s*(?:ii|2)\\s*ve\\b(?=[\\s\\S]*\\b850\\s*w\\b)", "max": 450 }
+  ]
+}

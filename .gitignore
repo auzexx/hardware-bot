@@ -1,0 +1,5 @@
+.state/
+.env*
+node_modules/
+*.dpapi
+PLAN.md
