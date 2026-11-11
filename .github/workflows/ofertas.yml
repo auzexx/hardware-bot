@@ -1,0 +1,48 @@
+name: Ofertas TJGaming
+on:
+  schedule:
+    - cron: '2-59/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      test_message:
+        description: Enviar somente uma mensagem de teste
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: ofertas-tjgaming
+  cancel-in-progress: false
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Validar filtro
+        run: node --test test/monitor.test.mjs
+      - name: Restaurar cursor
+        if: ${{ !inputs.test_message }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: .state
+          key: tjgaming-state-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: tjgaming-state-v1-
+      - name: Consultar canal ou enviar teste
+        run: node src/run.mjs
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TEST_MESSAGE: ${{ inputs.test_message && 'true' || 'false' }}
+      - name: Salvar cursor inclusive em falha parcial
+        if: ${{ always() && !inputs.test_message && hashFiles('.state/cursor.json') != '' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: .state
+          key: tjgaming-state-v1-${{ github.run_id }}-${{ github.run_attempt }}
