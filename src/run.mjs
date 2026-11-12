@@ -1,5 +1,5 @@
 import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
-import { fetchPosts, processPosts, matchOffers, alertText, sendTelegram } from './monitor.mjs';
+import { fetchPosts, processPosts, matchOffers, alertText, sendTelegram, isMonitoringTime } from './monitor.mjs';
 
 async function main() {
   const config = JSON.parse(await readFile(new URL('../rules.json', import.meta.url), 'utf8'));
@@ -15,6 +15,10 @@ async function main() {
     console.log('Teste aceito pelo Telegram na conversa privada.');
     return;
   }
+  if (!isMonitoringTime()) {
+    console.log('Fora do horario de monitoramento: 07:00 a 23:00, America/Sao_Paulo.');
+    return;
+  }
   let previous = null;
   try { previous = JSON.parse(await readFile('.state/cursor.json', 'utf8')); }
   catch (error) { if (error.code !== 'ENOENT') throw new Error('Nao foi possivel ler o estado persistido.'); }
@@ -28,6 +32,11 @@ async function main() {
   let sent = 0;
   const state = await processPosts(posts, previous, config.rules, {
     send: async (post, offer) => {
+      if (!isMonitoringTime()) {
+        const error = new Error('Horario de monitoramento encerrado; publicacoes pendentes preservadas.');
+        error.code = 'OUTSIDE_MONITORING_HOURS';
+        throw error;
+      }
       await sendTelegram(alertText(post, offer), process.env.TELEGRAM_BOT_TOKEN, process.env.TELEGRAM_CHAT_ID);
       sent++;
     },
@@ -40,4 +49,8 @@ async function main() {
   console.log(JSON.stringify({ postsChecked: posts.length, sent, cursor: state.cursor, initialized: previous === null }));
 }
 
-main().catch(error => { console.error(error.message); process.exitCode = 1; });
+main().catch(error => {
+  if (error.code === 'OUTSIDE_MONITORING_HOURS') { console.log(error.message); return; }
+  console.error(error.message);
+  process.exitCode = 1;
+});
