@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import * as monitor from '../src/monitor.mjs';
+import { readFileSync, mkdtempSync, existsSync, unlinkSync, rmdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseMoney, advertisedPrice, parseFeed, matchOffers, processPosts, fetchPosts, sendTelegram, isMonitoringTime } from '../src/monitor.mjs';
 
 const rules = [
@@ -119,4 +124,111 @@ test('sends only to a positive private chat id and does not leak a token on HTTP
   assert.equal(body.text, 'test');
   await assert.rejects(sendTelegram('test', token, '123', async () => { throw new Error(`secret ${token}`); }), error => !error.message.includes(token) && /Conexao/.test(error.message));
   await assert.rejects(sendTelegram('test', token, '123', async () => Response.json({ ok: true, result: { chat: { id: 456, type: 'private' } } })), /nao confirmou/);
+});
+
+test('WhatsApp sends encoded component, price and link to the fixed HTTPS service', async () => {
+  assert.equal(typeof monitor.sendWhatsApp, 'function');
+  const text = 'Ryzen 7 9700X por R$ 1.316,00!\nhttps://t.me/TJGOFERTASs/101865';
+  let request;
+  await monitor.sendWhatsApp(text, '+5511999990000', '12345678', async (raw, options) => {
+    request = { url: new URL(raw), options };
+    return new Response('Message queued. You will receive it in a few seconds.');
+  });
+  assert.equal(request.url.origin + request.url.pathname, 'https://api.callmebot.com/whatsapp.php');
+  assert.equal(request.url.searchParams.get('phone'), '+5511999990000');
+  assert.equal(request.url.searchParams.get('text'), text);
+  assert.equal(request.url.searchParams.get('apikey'), '12345678');
+  assert.equal(request.options.redirect, 'error');
+});
+
+test('WhatsApp rejects missing or malformed recipient credentials without making a request', async () => {
+  assert.equal(typeof monitor.sendWhatsApp, 'function');
+  for (const [phone, key] of [['', '12345678'], ['11999990000', '12345678'], ['+5511999990000', ''], ['+5511999990000', 'bad key']]) {
+    await assert.rejects(monitor.sendWhatsApp('test', phone, key, async () => assert.fail('invalid credentials sent')), /invalidos/);
+  }
+});
+
+test('WhatsApp does not accept HTTP errors, API errors or an unexplained success page', async () => {
+  assert.equal(typeof monitor.sendWhatsApp, 'function');
+  for (const response of [new Response('Error', { status: 403 }), new Response('ERROR: APIKey invalid'), new Response('<html>Welcome</html>')]) {
+    await assert.rejects(monitor.sendWhatsApp('test', '+5511999990000', '12345678', async () => response), /CallMeBot/);
+  }
+});
+
+test('WhatsApp hides credential-bearing transport errors and does not retry uncertain delivery', async () => {
+  assert.equal(typeof monitor.sendWhatsApp, 'function');
+  let calls = 0;
+  await assert.rejects(monitor.sendWhatsApp('test', '+5511999990000', '12345678', async raw => {
+    calls++;
+    throw new Error(`Timeout requesting ${raw}`);
+  }), error => !error.message.includes('12345678') && !error.message.includes('5511999990000') && /desconhecido/.test(error.message));
+  assert.equal(calls, 1);
+});
+
+test('each notification channel retains its own cursor and retries only its failed delivery', async () => {
+  assert.equal(typeof monitor.monitorChannels, 'function');
+  const states = { telegram: { cursor: 1, delivered: [] }, whatsapp: { cursor: 1, delivered: [] } };
+  const sent = [];
+  let whatsappOffline = true;
+  const channels = ['whatsapp', 'telegram'].map(id => ({ id, send: async p => {
+    if (id === 'whatsapp' && whatsappOffline) throw new Error('offline');
+    sent.push(`${id}:${p.id}`);
+  } }));
+  const options = {
+    now, canSend: () => true,
+    loadState: async id => structuredClone(states[id] ?? null),
+    saveState: async (id, state) => { states[id] = structuredClone(state); },
+    fetchChannelPosts: async () => [post(2)],
+  };
+  await assert.rejects(monitor.monitorChannels(channels, { channel: 'TJGOFERTASs', rules }, options), /whatsapp/);
+  assert.deepEqual(sent, ['telegram:2']);
+  assert.equal(states.telegram.cursor, 2);
+  assert.equal(states.whatsapp.cursor, 1);
+  whatsappOffline = false;
+  await monitor.monitorChannels(channels, { channel: 'TJGOFERTASs', rules }, options);
+  assert.deepEqual(sent, ['telegram:2', 'whatsapp:2']);
+});
+
+test('a newly enabled WhatsApp channel initializes without historical offers', async () => {
+  assert.equal(typeof monitor.monitorChannels, 'function');
+  let saved;
+  const result = await monitor.monitorChannels([{ id: 'whatsapp', send: async () => assert.fail('historical message') }], { channel: 'TJGOFERTASs', rules }, {
+    now, canSend: () => true, loadState: async () => null,
+    saveState: async (_, state) => { saved = state; }, fetchChannelPosts: async () => [post(2)],
+  });
+  assert.equal(saved.cursor, 2);
+  assert.equal(result[0].initialized, true);
+  assert.equal(result[0].sent, 0);
+});
+
+test('notification channels preserve pending state when the allowed hours end before delivery', async () => {
+  assert.equal(typeof monitor.monitorChannels, 'function');
+  let checks = 0;
+  let saved = false;
+  const result = await monitor.monitorChannels([{ id: 'whatsapp', send: async () => assert.fail('outside hours') }], { channel: 'TJGOFERTASs', rules }, {
+    now, canSend: () => ++checks === 1, loadState: async () => ({ cursor: 1, delivered: [] }),
+    saveState: async () => { saved = true; }, fetchChannelPosts: async () => [post(2)],
+  });
+  assert.equal(saved, false);
+  assert.equal(result[0].skipped, 'outside_hours');
+});
+
+test('the real runner still processes WhatsApp when Telegram credentials are missing', () => {
+  const work = mkdtempSync(join(tmpdir(), 'hardware-bot-test-'));
+  const stateFile = join(work, '.state', 'whatsapp.json');
+  const html = '<div data-post="TJGOFERTASs/42"><div class="tgme_widget_message_text">Ryzen 7 9700X R$ 1.300</div><time datetime="2026-11-11T22:00:00Z"></time></div>';
+  const preload = `Date.now=()=>Date.parse('2026-11-11T22:00:00Z');globalThis.fetch=async()=>new Response(${JSON.stringify(html)});`;
+  try {
+    const result = spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(preload)}`, fileURLToPath(new URL('../src/run.mjs', import.meta.url))], {
+      cwd: work, encoding: 'utf8', timeout: 10000,
+      env: { ...process.env, TEST_MESSAGE: 'false', TELEGRAM_BOT_TOKEN: '', TELEGRAM_CHAT_ID: '', WHATSAPP_PHONE: '+5511999990000', CALLMEBOT_API_KEY: '12345678' },
+    });
+    assert.match(result.stdout, /"channel":"whatsapp".*"initialized":true/);
+    assert.equal(JSON.parse(readFileSync(stateFile, 'utf8')).cursor, 42);
+    assert.equal(result.status, 1, 'report Telegram failure after WhatsApp is processed');
+  } finally {
+    if (existsSync(stateFile)) unlinkSync(stateFile);
+    if (existsSync(join(work, '.state'))) rmdirSync(join(work, '.state'));
+    rmdirSync(work);
+  }
 });
