@@ -1,5 +1,5 @@
 import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
-import { fetchPosts, processPosts, matchOffers, alertText, sendTelegram, isMonitoringTime } from './monitor.mjs';
+import { fetchPosts, matchOffers, alertText, sendTelegram, sendWhatsApp, validateWhatsApp, monitorChannels, isMonitoringTime } from './monitor.mjs';
 
 async function main() {
   const config = JSON.parse(await readFile(new URL('../rules.json', import.meta.url), 'utf8'));
@@ -11,42 +11,52 @@ async function main() {
     if (rule.exclude) new RegExp(rule.exclude, 'iu');
   }
   if (process.env.TEST_MESSAGE === 'true') {
-    await sendTelegram('Teste na nuvem: o GitHub Actions enviou esta mensagem ao seu Telegram. Seu computador pode ficar desligado.', process.env.TELEGRAM_BOT_TOKEN, process.env.TELEGRAM_CHAT_ID);
-    console.log('Teste aceito pelo Telegram na conversa privada.');
+    const target = process.env.TEST_CHANNEL || 'telegram';
+    if (!['telegram', 'whatsapp', 'both'].includes(target)) throw new Error('Canal de teste invalido.');
+    if (target === 'telegram' || target === 'both') {
+      await sendTelegram('Teste na nuvem: o GitHub Actions enviou esta mensagem ao seu Telegram. Seu computador pode ficar desligado.', process.env.TELEGRAM_BOT_TOKEN, process.env.TELEGRAM_CHAT_ID);
+      console.log('Teste aceito pelo Telegram na conversa privada.');
+    }
+    if (target === 'whatsapp' || target === 'both') {
+      await sendWhatsApp('Teste Hardware Bot: os alertas de componente, preco e link estao conectados ao WhatsApp pela nuvem. https://t.me/TJGOFERTASs', process.env.WHATSAPP_PHONE, process.env.CALLMEBOT_API_KEY);
+      console.log('Teste aceito pelo CallMeBot. Confirme o recebimento no WhatsApp.');
+    }
     return;
   }
   if (!isMonitoringTime()) {
     console.log('Fora do horario de monitoramento: 07:00 a 23:00, America/Sao_Paulo.');
     return;
   }
-  let previous = null;
-  try { previous = JSON.parse(await readFile('.state/cursor.json', 'utf8')); }
-  catch (error) { if (error.code !== 'ENOENT') throw new Error('Nao foi possivel ler o estado persistido.'); }
-  const posts = await fetchPosts(config.channel, previous?.cursor);
   if (process.argv.includes('--dry-run')) {
+    const posts = await fetchPosts(config.channel);
     console.log(JSON.stringify({ channel: config.channel, posts: posts.length, oldest: Math.min(...posts.map(p => p.id)), latest: Math.max(...posts.map(p => p.id)), matchingPosts: posts.filter(p => matchOffers(p, config.rules).length).length, sent: 0 }));
     return;
   }
-  // Validate credentials even on a run with no offers: setup errors must not stay hidden.
-  if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) throw new Error('Cadastre os dois segredos Telegram antes de ativar.');
-  let sent = 0;
-  const state = await processPosts(posts, previous, config.rules, {
-    send: async (post, offer) => {
-      if (!isMonitoringTime()) {
-        const error = new Error('Horario de monitoramento encerrado; publicacoes pendentes preservadas.');
-        error.code = 'OUTSIDE_MONITORING_HOURS';
-        throw error;
-      }
-      await sendTelegram(alertText(post, offer), process.env.TELEGRAM_BOT_TOKEN, process.env.TELEGRAM_CHAT_ID);
-      sent++;
+  const channels = [{ id: 'telegram',
+    validate: () => {
+      if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHAT_ID) throw new Error('Segredos Telegram ausentes.');
     },
-    checkpoint: async state => {
+    send: (post, offer) => sendTelegram(alertText(post, offer), process.env.TELEGRAM_BOT_TOKEN, process.env.TELEGRAM_CHAT_ID),
+  }];
+  if (process.env.WHATSAPP_PHONE || process.env.CALLMEBOT_API_KEY) {
+    channels.push({ id: 'whatsapp',
+      validate: () => validateWhatsApp(process.env.WHATSAPP_PHONE, process.env.CALLMEBOT_API_KEY),
+      send: (post, offer) => sendWhatsApp(alertText(post, offer), process.env.WHATSAPP_PHONE, process.env.CALLMEBOT_API_KEY),
+    });
+  }
+  const statePath = id => id === 'telegram' ? '.state/cursor.json' : '.state/whatsapp.json';
+  await monitorChannels(channels, config, {
+    loadState: async id => {
+      try { return JSON.parse(await readFile(statePath(id), 'utf8')); }
+      catch (error) { if (error.code === 'ENOENT') return null; throw new Error('Estado persistido invalido.'); }
+    },
+    saveState: async (id, state) => {
       await mkdir('.state', { recursive: true });
-      await writeFile('.state/cursor.tmp', JSON.stringify(state), { mode: 0o600 });
-      await rename('.state/cursor.tmp', '.state/cursor.json');
+      await writeFile(statePath(id) + '.tmp', JSON.stringify(state), { mode: 0o600 });
+      await rename(statePath(id) + '.tmp', statePath(id));
     },
+    report: result => console.log(JSON.stringify(result)),
   });
-  console.log(JSON.stringify({ postsChecked: posts.length, sent, cursor: state.cursor, initialized: previous === null }));
 }
 
 main().catch(error => {
