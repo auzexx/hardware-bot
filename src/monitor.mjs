@@ -1,3 +1,10 @@
+export function isMonitoringTime(timestamp = Date.now()) {
+  const hour = Number(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', hourCycle: 'h23',
+  }).format(new Date(timestamp)));
+  return hour >= 7 && hour < 23;
+}
+
 export function parseMoney(raw) {
   if (!/^(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{1,2})?$/.test(raw)) return null;
   const [whole, fraction = ''] = raw.replaceAll('.', '').split(',');
