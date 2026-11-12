@@ -1,6 +1,6 @@
 # Hardware Bot
 
-Filtro simples em Node.js: consulta a prévia pública de `TJGOFERTASs`, compara o preço anunciado com os limites em [rules.json](rules.json) e manda uma mensagem para uma única conversa privada do Telegram. Não usa IA, não compra produtos e não precisa de computador pessoal ligado depois de publicado no GitHub Actions.
+Filtro simples em Node.js: consulta a prévia pública de `TJGOFERTASs`, compara o preço anunciado com os limites em [rules.json](rules.json) e manda uma mensagem para uma única conversa privada do Telegram e, opcionalmente, para o próprio WhatsApp via CallMeBot. Não usa IA, não compra produtos e não precisa de computador pessoal ligado depois de publicado no GitHub Actions.
 
 ## Limites iniciais
 
@@ -31,6 +31,19 @@ Não colocar credenciais no código, no arquivo de regras, nos logs ou em coment
 
 Para testar na nuvem: **Actions → Ofertas TJGaming → Run workflow**, marque `test_message`. Essa execução envia apenas o aviso de teste. Depois rode novamente sem marcar para inicializar o cursor.
 
+### WhatsApp opcional
+
+O [CallMeBot](https://www.callmebot.com/blog/free-api-whatsapp-messages/) oferece envio de texto para uso pessoal. Ative o serviço conforme as instruções atuais do site e cadastre diretamente nos Secrets:
+
+- `WHATSAPP_PHONE`: seu número internacional, começando com `+`, seguido do código do país, DDD e número, sem espaços nem pontuação.
+- `CALLMEBOT_API_KEY`: chave recebida do CallMeBot após a ativação.
+
+O serviço recebe seu número, a chave e o texto de cada alerta para enviar ao seu WhatsApp. Não cole esses valores em arquivos, issues ou logs. O transporte aceita apenas HTTPS para o endereço fixo do CallMeBot e não segue redirecionamentos. A mensagem contém componente, preço anunciado e link do post da TJ. Não envia imagens. O aceite da fila do CallMeBot não comprova entrega no celular; confirme o recebimento no primeiro teste.
+
+Para testar só o WhatsApp, marque `test_message` e selecione `whatsapp` em `test_channel`. A seleção padrão é `telegram`; `both` testa ambos. Sem marcar `test_message`, o seletor não altera o monitoramento. Os testes explícitos podem ocorrer fora da faixa de horário.
+
+Cada canal mantém seu próprio cursor no cache. O Telegram continua usando `.state/cursor.json`; o WhatsApp usa `.state/whatsapp.json`. Ao habilitar o WhatsApp pela primeira vez, inicializa sem enviar o histórico. Uma falha em um canal preserva seus posts pendentes e não impede a consulta do outro. O workflow termina com erro se algum canal falhar, mesmo que o outro tenha concluído normalmente. Se ocorrer timeout depois do aceite do serviço, uma tentativa posterior pode repetir aquela mensagem.
+
 Na primeira consulta, o filtro guarda a última publicação sem enviar o histórico. O estado do cursor é salvo em cache do Actions. Se o cache for apagado ou expirar, a próxima consulta reinicializa sem enviar posts antigos; pode haver perda de alertas nesse intervalo. Envios aceitos são registrados antes de avançar o cursor; uma falha não descarta os posts pendentes. Em caso de timeout após um POST, não há como garantir que o Telegram não tenha recebido a mensagem, portanto uma execução posterior pode repetir esse aviso.
 
 A consulta busca até dez páginas para alcançar o cursor, ignora publicações com mais de dois dias e preserva o cursor se a prévia ficar indisponível ou mudar de formato. Não inclui o bot no canal da TJ nem acessa a conta pessoal do Telegram. Usa somente a prévia pública da web, que pode mudar ou ficar indisponível.
@@ -46,6 +59,6 @@ node --test test/monitor.test.mjs
 node src/run.mjs --dry-run
 ```
 
-O modo `--dry-run` apenas lê a prévia pública e mostra contagens; não envia mensagens nem grava o cursor. Para o modo de envio, use variáveis de ambiente para os dois segredos; não os passe como argumentos.
+O modo `--dry-run` apenas lê a prévia pública e mostra contagens; não envia mensagens nem grava o cursor. Para o modo de envio, use variáveis de ambiente para os segredos; não os passe como argumentos.
 
 Fontes: [Agendamentos](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule), [custos](https://docs.github.com/en/billing/concepts/product-billing/github-actions), [inativação de workflows](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/disable-and-enable-workflows), [prévia do canal](https://t.me/s/TJGOFERTASs).
