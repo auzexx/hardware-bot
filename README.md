@@ -9,6 +9,7 @@ Filtro simples em Node.js: consulta a prévia pública de `TJGOFERTASs`, compara
 | RTX 5070 (exceto Ti) | R$ 4.500 |
 | RX 9070 (exceto XT/GRE) | R$ 4.500 |
 | Ryzen 5 9600X | R$ 950 |
+| Ryzen 7 9700X | R$ 1.500 |
 | Gigabyte B650M D3HP AX | R$ 650 |
 | DeepCool AK400 básico | R$ 140 |
 | XPG Core Reactor II VE 850 W | R$ 450 |
@@ -17,7 +18,9 @@ Edite `max` em `rules.json` para mudar os valores. Eles estão em reais; `4500` 
 
 ## Execução na nuvem
 
-O workflow roda no runner Ubuntu padrão do GitHub, com consultas programadas a cada cinco minutos e execução manual. Os horários podem atrasar ou ser descartados por carga do GitHub: não é monitoramento em tempo real. Runners padrão em repositórios públicos são gratuitos conforme as regras atuais do GitHub. O GitHub pode desativar agendamentos de repositórios públicos após 60 dias sem atividade: consulte a aba Actions se os envios pararem.
+O workflow roda no runner Ubuntu padrão do GitHub, com consultas programadas a cada cinco minutos entre 07:00 e 23:00 no fuso `America/Sao_Paulo`, todos os dias. Os minutos programados são 02, 07, 12, 17, 22, 27, 32, 37, 42, 47, 52 e 57 de cada hora entre 7h e 22h. O código também verifica o horário antes de consultar e antes de enviar ofertas, para respeitar a faixa se uma execução atrasar; chamadas ao Telegram já em trânsito podem terminar depois do limite. Execuções manuais com `test_message` são testes explícitos e podem ocorrer fora dessa faixa.
+
+O GitHub permite intervalo mínimo de cinco minutos para agendamentos. Os horários podem atrasar ou ser descartados por carga do GitHub: não é monitoramento em tempo real. Runners padrão em repositórios públicos são gratuitos conforme as regras atuais do GitHub. O GitHub pode desativar agendamentos de repositórios públicos após 60 dias sem atividade: consulte a aba Actions se os envios pararem.
 
 Cadastre em **Settings → Secrets and variables → Actions**:
 
