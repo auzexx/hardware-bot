@@ -9,6 +9,14 @@ on:
         description: Enviar somente uma mensagem de teste
         type: boolean
         default: false
+      test_channel:
+        description: Canal que recebera o teste (marque test_message)
+        type: choice
+        options:
+          - telegram
+          - whatsapp
+          - both
+        default: telegram
 permissions:
   contents: read
 concurrency:
@@ -40,9 +48,12 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          WHATSAPP_PHONE: ${{ secrets.WHATSAPP_PHONE }}
+          CALLMEBOT_API_KEY: ${{ secrets.CALLMEBOT_API_KEY }}
           TEST_MESSAGE: ${{ inputs.test_message && 'true' || 'false' }}
+          TEST_CHANNEL: ${{ inputs.test_channel || 'telegram' }}
       - name: Salvar cursor inclusive em falha parcial
-        if: ${{ always() && !inputs.test_message && hashFiles('.state/cursor.json') != '' }}
+        if: ${{ always() && !inputs.test_message && hashFiles('.state/*.json') != '' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .state
