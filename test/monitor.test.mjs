@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseMoney, advertisedPrice, parseFeed, matchOffers, processPosts, fetchPosts, sendTelegram } from '../src/monitor.mjs';
+import { readFileSync } from 'node:fs';
+import { parseMoney, advertisedPrice, parseFeed, matchOffers, processPosts, fetchPosts, sendTelegram, isMonitoringTime } from '../src/monitor.mjs';
 
 const rules = [
   { id: '5070', name: 'RTX 5070', pattern: '\\brtx[ \\-]*5070\\b', exclude: '\\b5070\\s*ti\\b', max: 4500 },
@@ -8,6 +9,26 @@ const rules = [
 ];
 const now = Date.parse('2026-11-11T23:00:00Z');
 const post = (id, text = 'Placa RTX 5070 por R$ 4.031,00') => ({ id, text, date: '2026-11-11T22:00:00Z', url: `https://t.me/TJGOFERTASs/${id}` });
+
+test('configured 9700X alert includes R$ 1500 and excludes dearer or different processors', () => {
+  const configured = JSON.parse(readFileSync(new URL('../rules.json', import.meta.url), 'utf8')).rules;
+  const found = matchOffers(post(1, 'Processador AMD Ryzen 7 9700X por R$ 1.500,00'), configured);
+  assert.equal(found.length, 1);
+  assert.equal(found[0].rule.name, 'Ryzen 7 9700X');
+  assert.equal(matchOffers(post(1, 'Ryzen 7 9700X R$ 1.500,01'), configured).length, 0);
+  assert.equal(matchOffers(post(1, 'Ryzen 7 9700 R$ 1.400'), configured).length, 0);
+  assert.equal(matchOffers(post(1, 'Ryzen 7 9700X3D R$ 1.400'), configured).length, 0);
+});
+
+test('only monitors from 07:00 until 23:00 in Sao Paulo regardless of the runner timezone', () => {
+  for (const [utc, expected] of [
+    ['2026-11-11T09:59:59Z', false],
+    ['2026-11-11T10:00:00Z', true],
+    ['2026-11-12T01:59:59Z', true],
+    ['2026-11-12T02:00:00Z', false],
+    ['2026-11-12T03:30:00Z', false],
+  ]) assert.equal(isMonitoringTime(Date.parse(utc)), expected, utc);
+});
 
 test('reads Brazilian reais including grouped thousands and cents', () => {
   assert.equal(parseMoney('4.031,99'), 403199);
