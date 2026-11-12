@@ -136,3 +136,68 @@ export async function sendTelegram(text, token, chatId, fetcher = fetch) {
     throw new Error('Telegram nao confirmou a entrega na conversa privada pareada.');
   }
 }
+
+export function validateWhatsApp(phone, apiKey) {
+  if (!/^\+[1-9]\d{7,14}$/.test(phone ?? '') || !/^[A-Za-z0-9_-]{4,128}$/.test(apiKey ?? '')) {
+    throw new Error('Segredos WhatsApp ausentes ou invalidos.');
+  }
+}
+
+export async function sendWhatsApp(text, phone, apiKey, fetcher = fetch) {
+  validateWhatsApp(phone, apiKey);
+  const url = new URL('https://api.callmebot.com/whatsapp.php');
+  url.search = new URLSearchParams({ phone, apikey: apiKey, text }).toString();
+  let response, body;
+  try {
+    response = await fetcher(url.href, { redirect: 'error', signal: AbortSignal.timeout(20_000) });
+    body = await response.text();
+  } catch {
+    throw new Error('Conexao CallMeBot falhou; aceite desconhecido. Nenhum segredo foi registrado.');
+  }
+  if (!response.ok) throw new Error(`CallMeBot recusou o envio (HTTP ${response.status}).`);
+  const plain = body.replace(/<[^>]*>/g, ' ');
+  if (/\b(?:error|invalid|failed)\b/i.test(plain) || !/\bmessage\s+(?:successfully\s+)?(?:queued|sent)\b/i.test(plain)) {
+    throw new Error('CallMeBot nao confirmou o aceite da mensagem. Resposta omitida para proteger os segredos.');
+  }
+  // Queued by the provider does not prove delivery on the user's phone.
+}
+
+export async function monitorChannels(channels, config, options) {
+  const { loadState, saveState, fetchChannelPosts = fetchPosts, canSend = isMonitoringTime, report = () => {}, now = Date.now() } = options;
+  const results = [], failed = [];
+  for (const channel of channels) {
+    if (!canSend()) { results.push({ channel: channel.id, skipped: 'outside_hours' }); continue; }
+    try {
+      channel.validate?.();
+      const previous = await loadState(channel.id);
+      const posts = await fetchChannelPosts(config.channel, previous?.cursor);
+      let sent = 0;
+      const state = await processPosts(posts, previous, config.rules, {
+        now,
+        send: async (post, offer) => {
+          if (!canSend()) {
+            const error = new Error('Horario de monitoramento encerrado.');
+            error.code = 'OUTSIDE_MONITORING_HOURS';
+            throw error;
+          }
+          await channel.send(post, offer);
+          sent++;
+        },
+        checkpoint: state => saveState(channel.id, state),
+      });
+      const result = { channel: channel.id, postsChecked: posts.length, sent, cursor: state.cursor, initialized: previous === null };
+      results.push(result);
+      report(result);
+    } catch (error) {
+      if (error.code === 'OUTSIDE_MONITORING_HOURS') {
+        results.push({ channel: channel.id, skipped: 'outside_hours' });
+        continue;
+      }
+      // Never log arbitrary transport errors: they can embed credentials.
+      failed.push(channel.id);
+      report({ channel: channel.id, failed: true, cursorPreserved: true });
+    }
+  }
+  if (failed.length) throw new Error(`Falha nos canais: ${failed.join(', ')}. Os demais foram processados; consultar configuracao e disponibilidade.`);
+  return results;
+}
