@@ -3,6 +3,7 @@
   "rules": [
     { "id": "rtx5070", "name": "RTX 5070", "pattern": "\\brtx[ \\-]*5070\\b", "exclude": "\\b5070\\s*ti\\b", "max": 4899.99 },
     { "id": "rx9070", "name": "RX 9070", "pattern": "\\brx[ \\-]*9070\\b", "exclude": "\\b9070\\s*(?:xt|gre)\\b", "max": 4899.99 },
+    {"id":"rx9070gre","name":"RX 9070 GRE","pattern":"\\brx[ \\-]*9070\\s*gre\\b","max":4000},
     { "id": "ryzen9600x", "name": "Ryzen 5 9600X", "pattern": "\\b(?:ryzen\\s*5\\s*)?9600x\\b", "max": 950 },
     { "id": "ryzen9700x", "name": "Ryzen 7 9700X", "pattern": "\\b(?:ryzen\\s*7\\s*)?9700x\\b", "max": 1500 },
     { "id": "b650m", "name": "Gigabyte B650M D3HP AX", "pattern": "\\bb650m\\s+d3hp\\s+ax\\b", "max": 650 },
@@ -10,4 +11,6 @@
     { "id": "xpg850", "name": "XPG Core Reactor II VE 850 W", "pattern": "\\bcore\\s*reactor\\s*(?:ii|2)\\s*ve\\b(?=[\\s\\S]*\\b850\\s*w\\b)", "max": 450 }
   ]
 }
+
+
 
