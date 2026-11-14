@@ -15,14 +15,21 @@ const rules = [
 const now = Date.parse('2026-11-11T23:00:00Z');
 const post = (id, text = 'Placa RTX 5070 por R$ 4.031,00') => ({ id, text, date: '2026-11-11T22:00:00Z', url: `https://t.me/TJGOFERTASs/${id}` });
 
-test('configured 9700X alert includes R$ 1500 and excludes dearer or different processors', () => {
+test('configured GPU alerts respect their price limits and distinguish models', () => {
   const configured = JSON.parse(readFileSync(new URL('../rules.json', import.meta.url), 'utf8')).rules;
-  const found = matchOffers(post(1, 'Processador AMD Ryzen 7 9700X por R$ 1.500,00'), configured);
-  assert.equal(found.length, 1);
-  assert.equal(found[0].rule.name, 'Ryzen 7 9700X');
-  assert.equal(matchOffers(post(1, 'Ryzen 7 9700X R$ 1.500,01'), configured).length, 0);
-  assert.equal(matchOffers(post(1, 'Ryzen 7 9700 R$ 1.400'), configured).length, 0);
-  assert.equal(matchOffers(post(1, 'Ryzen 7 9700X3D R$ 1.400'), configured).length, 0);
+  for (const [name, limit, above] of [
+    ['RTX 5070', '4.899,99', '4.900,00'],
+    ['RX 9070', '4.899,99', '4.900,00'],
+    ['RX 9070 GRE', '4.100,00', '4.100,01'],
+  ]) {
+    const found = matchOffers(post(1, `${name} por R$ ${limit}`), configured);
+    assert.equal(found.length, 1);
+    assert.equal(found[0].rule.name, name);
+    assert.equal(matchOffers(post(1, `${name} por R$ ${above}`), configured).length, 0);
+  }
+  for (const name of ['RTX 5070 Ti', 'RX 9070 XT', 'RX 7900 GRE']) {
+    assert.equal(matchOffers(post(1, `${name} por R$ 3.000`), configured).length, 0);
+  }
 });
 
 test('only monitors from 07:00 until 23:00 in Sao Paulo regardless of the runner timezone', () => {
