@@ -1,22 +1,24 @@
 # Hardware Bot
 
+**Cloudflare:** a versão com cron de um minuto, das 7h às 23h de São Paulo, e estado durável está em `src/worker.mjs`. Consulte [configuração, testes e migração](docs/CLOUDFLARE.md). O arquivo `wrangler.jsonc` começa desativado por segurança. Após o corte, manter o workflow antigo do GitHub desativado.
+
 Filtro simples em Node.js: consulta a prévia pública de `TJGOFERTASs`, compara o preço anunciado com os limites em [rules.json](rules.json) e manda uma mensagem para uma única conversa privada do Telegram e, opcionalmente, para o próprio WhatsApp via CallMeBot. Não usa IA, não compra produtos e não precisa de computador pessoal ligado depois de publicado no GitHub Actions.
 
-## Limites iniciais
+## Limites atuais
 
 | Componente | Preço máximo anunciado |
 |---|---:|
-| RTX 5070 (exceto Ti) | R$ 4.500 |
-| RX 9070 (exceto XT/GRE) | R$ 4.500 |
-| Ryzen 5 9600X | R$ 950 |
-| Ryzen 7 9700X | R$ 1.500 |
-| Gigabyte B650M D3HP AX | R$ 650 |
-| DeepCool AK400 básico | R$ 140 |
-| XPG Core Reactor II VE 850 W | R$ 450 |
+| RTX 5070 (exceto Ti) | R$ 4.899,99 |
+| RX 9070 (exceto XT/GRE) | R$ 4.899,99 |
+| RX 9070 GRE | R$ 4.100 |
 
 Edite `max` em `rules.json` para mudar os valores. Eles estão em reais; `4500` significa R$ 4.500. O limite inclui igualdade. Os padrões e exclusões permitem distinguir modelos próximos. Anúncios com vários componentes monitorados ou de PCs completos são ignorados por não terem associação confiável entre cada peça e cada preço.
 
-## Execução na nuvem
+Na Cloudflare, uma alteração de regras exige publicar novamente o Worker; não há deploy automático a partir do GitHub. Informar explicitamente `--var MONITOR_MODE:live` ao republicar o monitor ativo e preservar os Secrets/variáveis de migração. Uma publicação padrão começa desativada.
+
+## Implementação anterior no GitHub Actions
+
+Esta seção documenta o runner anterior. Não reativar seu agendamento enquanto a Cloudflare estiver ativa; a reversão exige transferir os cursores atuais conforme o guia de migração.
 
 O workflow roda no runner Ubuntu padrão do GitHub, com consultas programadas a cada cinco minutos entre 07:00 e 23:00 no fuso `America/Sao_Paulo`, todos os dias. Os minutos programados são 02, 07, 12, 17, 22, 27, 32, 37, 42, 47, 52 e 57 de cada hora entre 7h e 22h. O código também verifica o horário antes de consultar e antes de enviar ofertas, para respeitar a faixa se uma execução atrasar; chamadas ao Telegram já em trânsito podem terminar depois do limite. Execuções manuais com `test_message` são testes explícitos e podem ocorrer fora dessa faixa.
 
