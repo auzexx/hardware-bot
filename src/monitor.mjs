@@ -149,7 +149,7 @@ export async function sendWhatsApp(text, phone, apiKey, fetcher = fetch) {
   url.search = new URLSearchParams({ phone, apikey: apiKey, text }).toString();
   let response, body;
   try {
-    response = await fetcher(url.href, { redirect: 'error', signal: AbortSignal.timeout(20_000) });
+    response = await fetcher(url.href, { redirect: 'manual', signal: AbortSignal.timeout(20_000) });
     body = await response.text();
   } catch {
     throw new Error('Conexao CallMeBot falhou; aceite desconhecido. Nenhum segredo foi registrado.');
