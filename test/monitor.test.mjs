@@ -145,7 +145,7 @@ test('WhatsApp sends encoded component, price and link to the fixed HTTPS servic
   assert.equal(request.url.searchParams.get('phone'), '+5511999990000');
   assert.equal(request.url.searchParams.get('text'), text);
   assert.equal(request.url.searchParams.get('apikey'), '12345678');
-  assert.equal(request.options.redirect, 'error');
+  assert.equal(request.options.redirect, 'manual');
 });
 
 test('WhatsApp rejects missing or malformed recipient credentials without making a request', async () => {
@@ -157,7 +157,7 @@ test('WhatsApp rejects missing or malformed recipient credentials without making
 
 test('WhatsApp does not accept HTTP errors, API errors or an unexplained success page', async () => {
   assert.equal(typeof monitor.sendWhatsApp, 'function');
-  for (const response of [new Response('Error', { status: 403 }), new Response('ERROR: APIKey invalid'), new Response('<html>Welcome</html>')]) {
+  for (const response of [new Response('Error', { status: 403 }), new Response('Message queued', { status: 302, headers: { location: 'https://other.example/' } }), new Response('ERROR: APIKey invalid'), new Response('<html>Welcome</html>')]) {
     await assert.rejects(monitor.sendWhatsApp('test', '+5511999990000', '12345678', async () => response), /CallMeBot/);
   }
 });
