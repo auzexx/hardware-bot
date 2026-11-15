@@ -3,3 +3,6 @@
 node_modules/
 *.dpapi
 PLAN.md
+.wrangler/
+dist/
+.dev.vars*

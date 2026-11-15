@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hardware-bot",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-11-14",
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": {
+    "MONITOR_MODE": "disabled"
+  },
+  "triggers": {
+    // UTC: 10:00–01:59 = 07:00–22:59 in Sao Paulo (UTC-3).
+    "crons": ["* 0-1,10-23 * * *"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "MONITOR", "class_name": "HardwareMonitor" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["HardwareMonitor"] }],
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "invocation_logs": false }
+  }
+}
